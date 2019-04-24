@@ -15,14 +15,14 @@
 #define MAX_MESSAGE_LENGTH 24
 
 /*
------------------DEBUG FLAGS AND FEATURE START
+  -----------------DEBUG FLAGS AND FEATURE START
 */
 #ifdef  DEBUG
-  #define DEBUG_PRINT(x) Serial.print(x)
-  #define DEBUG_PRINTLN(x) Serial.println(x)
+#define DEBUG_PRINT(x) Serial.print(x)
+#define DEBUG_PRINTLN(x) Serial.println(x)
 #else
-  #define DEBUG_PRINT(x)
-  #define DEBUG_PRINTLN(x)
+#define DEBUG_PRINT(x)
+#define DEBUG_PRINTLN(x)
 #endif
 
 #define OUTPUT_NORMALIZED_VECTORS 0
@@ -32,5 +32,5 @@
 #define OUTPUT_MPU_FIFO_OVERFLOW 1
 #define PAUSE_ON_OVERFLOW 0
 /*
------------------DEBUG FLAGS AND FEATURE END
+  -----------------DEBUG FLAGS AND FEATURE END
 */

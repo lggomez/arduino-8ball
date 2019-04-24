@@ -12,7 +12,7 @@
 #include "src/lib/MPU6050_6Axis_MotionApps20.h"
 
 #ifdef U8X8_HAVE_HW_I2C || (I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE)
-  #include <Wire.h>
+#include <Wire.h>
 #endif
 
 #define INTERRUPT_PIN 2
@@ -21,7 +21,7 @@
 enum fizzlefade_mode { fill, clear };
 
 /*
------------------FUNCTION PROTOTYPES START (bless the arduino builder)
+  -----------------FUNCTION PROTOTYPES START (bless the arduino builder)
 */
 //main(ssh1106ex)
 void loop(void);
@@ -41,7 +41,7 @@ char* subStr(char* str, char *delim, byte index);
 //messages.ino
 String getMessage(byte index);
 /*
------------------FUNCTION PROTOTYPES END
+  -----------------FUNCTION PROTOTYPES END
 */
 
 bool blinkState = false;
@@ -279,17 +279,17 @@ long vectorNorm(VectorInt16 *vec) {
   long root = sqrt(sum);
 #if OUTPUT_NORMALIZED_VECTORS
   DEBUG_PRINT(F("norm\t");
-  DEBUG_PRINT(a);
-  DEBUG_PRINT(F("\t"));
-  DEBUG_PRINT(b);
-  DEBUG_PRINT(F("\t"));
-  DEBUG_PRINT(c);
-  DEBUG_PRINT(F("sum\t"));
-  DEBUG_PRINT(sum);
-  DEBUG_PRINT(F("\t"));
-  DEBUG_PRINTLN(root);
+              DEBUG_PRINT(a);
+              DEBUG_PRINT(F("\t"));
+              DEBUG_PRINT(b);
+              DEBUG_PRINT(F("\t"));
+              DEBUG_PRINT(c);
+              DEBUG_PRINT(F("sum\t"));
+              DEBUG_PRINT(sum);
+              DEBUG_PRINT(F("\t"));
+              DEBUG_PRINTLN(root);
 #endif
-  return root;
+              return root;
 }
 
 byte sign(long x) {
@@ -321,6 +321,6 @@ void displayMessage(byte index) {
 void displayIdleMessage() {
   u8g2.firstPage();
   do {
-    u8g2.drawStr((SH1106_WIDTH/2) - (3*FONT_WIDTH), (SH1106_HEIGHT/2) - (FONT_HEIGTH/2), "Ask me");
+    u8g2.drawStr((SH1106_WIDTH / 2) - (3 * FONT_WIDTH), (SH1106_HEIGHT / 2) - (FONT_HEIGTH / 2), "Ask me");
   } while (u8g2.nextPage());
 }
