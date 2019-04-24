@@ -315,7 +315,7 @@ void displayMessage(byte index) {
   DEBUG_PRINTLN(F("]"));
 #endif
 
-  fizzlefade_message(charMessage, random(0, 100) > 50 ? fill : clear);
+  fizzlefade_message(charMessage, fill/*random(0, 100) > 50 ? fill : clear*/);
 }
 
 void displayIdleMessage() {
