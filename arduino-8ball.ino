@@ -8,8 +8,8 @@
 #include <SPI.h>
 #include "_const.h"
 #include "src/lib/U8g2/src/U8g2lib.h"
-#include "src/lib/I2Cdev.h"
-#include "src/lib/MPU6050_6Axis_MotionApps20.h"
+#include "src/lib/MPU6050/src/I2Cdev.h"
+#include "src/lib/MPU6050/src/MPU6050_6Axis_MotionApps20.h"
 
 #ifdef U8X8_HAVE_HW_I2C || (I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE)
 #include <Wire.h>
@@ -193,7 +193,7 @@ void loop(void) {
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
     long currentMagnitude = vectorNorm(&aaReal);
 
-    // Overflow detection & stabilization
+    // Magnitude overflow detection & stabilization
     long delta = abs(currentMagnitude - previousMagnitude);
     long margin = minl((long)abs(5 * previousMagnitude), 10000);
     bool currentSlope = sign(delta);
@@ -212,9 +212,6 @@ void loop(void) {
         DEBUG_PRINTLN(F(" - Overflow detected. Ignore iteration"));
 #endif
         previousMagnitude = minl(currentMagnitude, previousMagnitude);
-#if PAUSE_ON_OVERFLOW
-        delay(500);
-#endif
         return;
       }
     }
@@ -229,6 +226,7 @@ void loop(void) {
       DEBUG_PRINTLN(F("SHAKE"));
       shakeCount++;
       if (shakeCount > 3) {
+        mpu.setFIFOEnabled(false);
         index = random(0, 14);
         DEBUG_PRINT(F("Display message "));
         DEBUG_PRINTLN(index);
@@ -237,6 +235,7 @@ void loop(void) {
         drawFillPaged();
         displayIdleMessage();
         shakeCount = 0;
+        mpu.setFIFOEnabled(true);
       }
       accelAccum = 0;
     }
