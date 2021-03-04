@@ -52,7 +52,7 @@ boolean fizzlefade_message(char* charMessage, fizzlefade_mode mode)
       }
       if (x <= SH1106_WIDTH && y <= SH1106_HEIGHT) {
         batch_count++;
-        fizzle_message(x , y, charMessage, lineCount, mode, batch_count);
+        fizzle_message(x, y, charMessage, lineCount, mode, batch_count);
       }
     } while (rndval != 1);
   } while (u8g2.nextPage());

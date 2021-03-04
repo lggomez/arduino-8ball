@@ -79,21 +79,15 @@ unsigned long startTime = millis();
 unsigned long elapsedTime = 0;
 
 uint32_t reseedRandomSeed EEMEM = 0xFFFFFFFF;
+
 void setup(void) {
-  wdt_enable(WDTO_8S);
-  reseedRandom(&reseedRandomSeed);
+  wdt_enable(WDTO_8S); // watchdog
+  reseedRandom(&reseedRandomSeed); // custom random seed init
 
   // Join I2C bus (I2Cdev library doesn't do this automatically)
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
   Wire.begin();
   TWBR = 103; // 400kHz I2C clock (200kHz if CPU is 8MHz)
-#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-  Fastwire::setup(400, true);
-#endif
-
-  // join I2C bus (I2Cdev library doesn't do this automatically)
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-  Wire.begin();
 #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
   Fastwire::setup(400, true);
 #endif
@@ -108,10 +102,11 @@ void setup(void) {
   if (!accelgyro.testConnection()) {
     DEBUG_PRINTLN("Failed to initialize MPU6050 chip");
     while (1) {
-      delay(1000);
+      delay(3000);
     }
   }
 
+  // Show initial sensor setup
   DEBUG_PRINT(accelgyro.getXAccelOffset()); DEBUG_PRINT("\t"); // -76
   DEBUG_PRINT(accelgyro.getYAccelOffset()); DEBUG_PRINT("\t"); // -2359
   DEBUG_PRINT(accelgyro.getZAccelOffset()); DEBUG_PRINT("\t"); // 1688
@@ -130,9 +125,10 @@ void setup(void) {
   DEBUG_PRINT(accelgyro.getZGyroOffset()); DEBUG_PRINT("\t"); // 0
   DEBUG_PRINT("\n");
 
-  // configure LED for output
+  // Configure LED for output
   pinMode(LED_PIN, OUTPUT);
 
+  // Initialize display
   DEBUG_PRINTLN(F("Initializing u8g2 driver"));
   u8g2.setI2CAddress(0x3c << 1);
   u8g2.begin();
@@ -145,15 +141,9 @@ void setup(void) {
   displayIdleMessage();
 }
 
-void resetCounters() {
-  accelCount = 0;
-  shakeCount = 0;
-  startTime = millis();
-}
-
 void loop(void) {
+  // Reset watchdog timer
   wdt_reset();
-
 
   // Reset counters if enough time has passed
   if (elapsedTime >= TIME_THRESHOLD) {
@@ -187,6 +177,7 @@ void loop(void) {
   DEBUG_PRINTLN(*roll);
 #endif
 
+  // Shake detection based on IMU data and increment counters
   if ((*roll >= ROLL_THRESHOLD) && (*pitch >= PITCH_THRESHOLD)) {
     shakeCount++;
   }
@@ -195,6 +186,7 @@ void loop(void) {
   accelCount -= accelCount % 2;
   shakeCount += currentShakes;
 
+  // If shaken enough times, show message and reset counter/timer
   if (shakeCount == SHAKE_COUNT_TRIGGER) {
     DEBUG_PRINTLN(F("SHAKE"));
 
@@ -202,20 +194,26 @@ void loop(void) {
     DEBUG_PRINT(F("Display message "));
     DEBUG_PRINTLN(messageIndex);
     displayMessage(messageIndex);
-    delay(REFRESH_INTERVAL * 2);
+    delay(MESSAGE_REFRESH_INTERVAL * 2);
     drawFillPaged();
     displayIdleMessage();
     resetCounters();
   }
 
-  // blink LED to indicate activity
+  // Blink LED to indicate activity
   blinkState = !blinkState;
   digitalWrite(LED_PIN, blinkState);
-  delay(sleepDelay); // calculate delay from sample rate
+  delay(sleepDelay); // calculated delay from sample rate
 
   // Calculate elapsed time and increment counter
   elapsedTime = millis() - startTime;
   timeCount += elapsedTime;
+}
+
+void resetCounters() {
+  accelCount = 0;
+  shakeCount = 0;
+  startTime = millis();
 }
 
 // complementaryFilterr reduces the IMU input into a 2-dimensional output (pitch, roll)
