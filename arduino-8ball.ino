@@ -1,4 +1,4 @@
-#define DEBUG 0
+//#define DEBUG 1
 
 #include <Arduino.h>
 #include <WString.h>
@@ -7,12 +7,12 @@
 #include <avr/wdt.h>
 #include <SPI.h>
 #include "_const.h"
-#include "src/lib/U8g2/src/U8g2lib.h"
-#include "src/lib/MPU6050/src/I2Cdev.h"
-#include "src/lib/MPU6050/src/MPU6050_6Axis_MotionApps20.h"
+#include <U8g2lib.h> // Library: U8g2 by oliver Version 2.28.10
+#include "I2Cdev.h"
+#include "MPU6050.h" // Library: MPU6050 by Electronic Cats Version0.2.1
 
-#ifdef U8X8_HAVE_HW_I2C || (I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE)
-#include <Wire.h>
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+#include "Wire.h"
 #endif
 
 #define INTERRUPT_PIN 2
@@ -23,13 +23,10 @@ enum fizzlefade_mode { fill, clear };
 /*
   -----------------FUNCTION PROTOTYPES START (bless the arduino builder)
 */
-//main(ssh1106ex)
 void loop(void);
-long minl(long x, long y);
-byte sign(long x);
-long vectorNorm(VectorInt16 *vec);
+void complementaryFilter(int16_t accData[3], int16_t gyrData[3], float *pitch, float *roll);
 void displayIdleMessage();
-void displayMessage(byte index);
+void displayMessage(long index);
 // fizzlefade.ino
 boolean fizzlefade_message(char* charMessage, fizzlefade_mode mode);
 void fizzle_message(u8g2_uint_t x, u8g2_uint_t y, char* charMessage, byte lineCount, fizzlefade_mode mode, u8g2_uint_t batch_count);
@@ -39,7 +36,11 @@ void printMessage(char* charMessage, byte lineCount, fizzlefade_mode mode);
 byte getLineCount(const char* charMessage);
 char* subStr(char* str, char *delim, byte index);
 //messages.ino
-String getMessage(byte index);
+String getMessage(long index);
+//random.ino
+void reseedRandom(uint32_t* address);
+void reseedRandomInit(uint32_t* address, uint32_t value);
+inline void reseedRandomInit(unsigned short address, uint32_t value);
 /*
   -----------------FUNCTION PROTOTYPES END
 */
@@ -47,38 +48,41 @@ String getMessage(byte index);
 bool blinkState = false;
 
 // Mpu instance
-MPU6050 mpu;
+// class default I2C address is 0x68
+// specific I2C addresses may be passed as a parameter here
+// AD0 low = 0x68 (default for InvenSense evaluation board)
+// AD0 high = 0x69
+MPU6050 accelgyro;
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
 
 // u8g2 constructor
 U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 
-// MPU control/status vars
-bool dmpReady = false;  // set true if DMP init was successful
-uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
-uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
-uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
-uint16_t fifoCount;     // count of all bytes currently in FIFO
-uint8_t fifoBuffer[64]; // FIFO storage buffer
+#define ACCELEROMETER_SENSITIVITY 8192.0
+#define GYROSCOPE_SENSITIVITY 65.536
+#define dt 0.01 // 10 ms sample rate!
+#define ROLL_THRESHOLD 2.5
+#define PITCH_THRESHOLD 2.0
+#define TIME_THRESHOLD 3000
+#define SHAKE_COUNT_TRIGGER 3
 
-// Orientation/motion vars
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorFloat gravity;    // [x, y, z]            gravity vector
+int messageIndex;
+int sleepDelay = 1000 * dt;
 
-int index;
-byte accelAccum = 0;
-uint16_t magnitudeThreshold = 500;
-double previousMagnitude = 0;
-byte shakeCount = 0;
+unsigned int timeCount = 0;
+unsigned short accelCount = 0;
+unsigned short shakeCount = 0;
+unsigned short currentShakes = 0;
 
-volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
-void dmpDataReady() {
-  mpuInterrupt = true;
-}
+unsigned long startTime = millis();
+unsigned long elapsedTime = 0;
 
+uint32_t reseedRandomSeed EEMEM = 0xFFFFFFFF;
 void setup(void) {
   wdt_enable(WDTO_8S);
+  reseedRandom(&reseedRandomSeed);
+
   // Join I2C bus (I2Cdev library doesn't do this automatically)
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
   Wire.begin();
@@ -87,219 +91,159 @@ void setup(void) {
   Fastwire::setup(400, true);
 #endif
 
-  DEBUG_PRINTLN(F("Connected to I2C bus"));
+  // join I2C bus (I2Cdev library doesn't do this automatically)
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+  Wire.begin();
+#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+  Fastwire::setup(400, true);
+#endif
 
-  Serial.begin(115200);
-  while (!Serial); // Wait for Leonardo enumeration, others continue immediately
-  randomSeed(analogRead(0));
+  Serial.begin(38400);
 
-  DEBUG_PRINTLN(F("Initializing MPU6050 device..."));
-  mpu.initialize();
+  DEBUG_PRINTLN();
+  DEBUG_PRINTLN(F("Setup start"));
 
-  mpu.setFullScaleGyroRange(3);
-  mpu.setFullScaleAccelRange(3);
-
-  pinMode(INTERRUPT_PIN, INPUT);
-
-  DEBUG_PRINTLN(F("Testing MPU6050 connection..."));
-  DEBUG_PRINTLN(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-
-  // Load and configure the DMP
-  DEBUG_PRINTLN(F("Initializing MPU DMP..."));
-  devStatus = mpu.dmpInitialize();
-
-  DEBUG_PRINTLN(F("Initializing gyro offsets"));
-
-  // Gyro offsets
-  mpu.setXGyroOffset(220);
-  mpu.setYGyroOffset(76);
-  mpu.setZGyroOffset(-85);
-  mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
-  mpu.setSleepEnabled(0);
-
-  // Make sure it worked (returns 0 if so)
-  if (devStatus == 0) {
-    // Turn on the DMP
-    DEBUG_PRINTLN(F("Enabling DMP..."));
-    mpu.setDMPEnabled(true);
-
-    // Enable Arduino interrupt detection
-    DEBUG_PRINTLN(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
-    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
-    mpuIntStatus = mpu.getIntStatus();
-
-    // Set our DMP Ready flag so the main loop() function knows it's okay to use it
-    DEBUG_PRINTLN(F("DMP ready! Waiting for first interrupt..."));
-    dmpReady = true;
-
-    // Get expected DMP packet size for later comparison
-    packetSize = mpu.dmpGetFIFOPacketSize();
-  } else {
-    // ERROR!
-    // 1 = initial memory load failed
-    // 2 = DMP configuration updates failed
-    DEBUG_PRINT(F("DMP Initialization failed (code "));
-    DEBUG_PRINT(devStatus);
-    DEBUG_PRINTLN(F(")"));
+  DEBUG_PRINTLN(F("Initializing MPU6050"));
+  accelgyro.initialize();
+  if (!accelgyro.testConnection()) {
+    DEBUG_PRINTLN("Failed to initialize MPU6050 chip");
+    while (1) {
+      delay(1000);
+    }
   }
 
-  DEBUG_PRINTLN(F("*Init finished"));
+  DEBUG_PRINT(accelgyro.getXAccelOffset()); DEBUG_PRINT("\t"); // -76
+  DEBUG_PRINT(accelgyro.getYAccelOffset()); DEBUG_PRINT("\t"); // -2359
+  DEBUG_PRINT(accelgyro.getZAccelOffset()); DEBUG_PRINT("\t"); // 1688
+  DEBUG_PRINT(accelgyro.getXGyroOffset()); DEBUG_PRINT("\t"); // 0
+  DEBUG_PRINT(accelgyro.getYGyroOffset()); DEBUG_PRINT("\t"); // 0
+  DEBUG_PRINT(accelgyro.getZGyroOffset()); DEBUG_PRINT("\t"); // 0
+  DEBUG_PRINT("\n");
+  accelgyro.setXGyroOffset(220);
+  accelgyro.setYGyroOffset(76);
+  accelgyro.setZGyroOffset(-85);
+  DEBUG_PRINT(accelgyro.getXAccelOffset()); DEBUG_PRINT("\t"); // -76
+  DEBUG_PRINT(accelgyro.getYAccelOffset()); DEBUG_PRINT("\t"); // -2359
+  DEBUG_PRINT(accelgyro.getZAccelOffset()); DEBUG_PRINT("\t"); // 1688
+  DEBUG_PRINT(accelgyro.getXGyroOffset()); DEBUG_PRINT("\t"); // 0
+  DEBUG_PRINT(accelgyro.getYGyroOffset()); DEBUG_PRINT("\t"); // 0
+  DEBUG_PRINT(accelgyro.getZGyroOffset()); DEBUG_PRINT("\t"); // 0
+  DEBUG_PRINT("\n");
 
+  // configure LED for output
   pinMode(LED_PIN, OUTPUT);
+
+  DEBUG_PRINTLN(F("Initializing u8g2 driver"));
+  u8g2.setI2CAddress(0x3c << 1);
   u8g2.begin();
+  u8g2.setPowerSave(0);
   u8g2.setFont(FONT);
+
+  DEBUG_PRINTLN(F("Setup finished"));
+
   drawFillPaged();
   displayIdleMessage();
 }
 
+void resetCounters() {
+  accelCount = 0;
+  shakeCount = 0;
+  startTime = millis();
+}
+
 void loop(void) {
   wdt_reset();
-  // If programming failed, don't try to do anything
-  if (!dmpReady) {
-    DEBUG_PRINTLN(F("--ERROR: Setup failed. ignoring loop"));
-    delay(5000);
-    return;
+
+
+  // Reset counters if enough time has passed
+  if (elapsedTime >= TIME_THRESHOLD) {
+    DEBUG_PRINT("resetting after idle:\t");
+    DEBUG_PRINT(elapsedTime);
+    delay(500);
+    resetCounters();
   }
 
-  // Reset interrupt flag and get INT_STATUS byte
-  mpuInterrupt = false;
-  mpuIntStatus = mpu.getIntStatus();
+  // Read raw accel/gyro measurements from device
+  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  int16_t accelData[3] = {ax, ay, az};
+  int16_t gyroData[3] = {gx, gy, gz};
 
-  // Get current FIFO count
-  fifoCount = mpu.getFIFOCount();
+  // Calculate updated pitch and roll from current accel & gyro data
+  float pval = 0.0;
+  float* pitch = &pval;
+  float rval = 0.0;
+  float* roll = &rval;
+  complementaryFilter(accelData, gyroData, pitch, roll);
 
-  // Check for overflow (this should never happen unless our code is too inefficient)
-  if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
-    DEBUG_PRINTLN(F("Overflow!. Resetting FIFO buffer"));
-    // Reset so we can continue cleanly
-    mpu.resetFIFO();
-    return;
-    // Otherwise, check for DMP data ready interrupt (this should happen frequently)
-  } else if (mpuIntStatus & 0x02) {
-    // Wait for correct available data length, should be a VERY short wait
-    while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
-
-    // Read a packet from FIFO
-    mpu.getFIFOBytes(fifoBuffer, packetSize);
-
-    // Track FIFO count here in case there is > 1 packet available
-    // (this lets us immediately read more without waiting for an interrupt)
-    fifoCount -= packetSize;
-
-    // Display real acceleration, adjusted to remove gravity
-    mpu.dmpGetQuaternion(&q, fifoBuffer);
-    mpu.dmpGetAccel(&aa, fifoBuffer);
-    mpu.dmpGetGravity(&gravity, &q);
-    mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-    long currentMagnitude = vectorNorm(&aaReal);
-
-    // Magnitude overflow detection & stabilization
-    long delta = abs(currentMagnitude - previousMagnitude);
-    long margin = minl((long)abs(5 * previousMagnitude), 10000);
-    bool currentSlope = sign(delta);
-
-    if (previousMagnitude != 0.0) {
-      if (delta > margin) {
-#if OUTPUT_MPU_FIFO_OVERFLOW
-        DEBUG_PRINT(F("curr "));
-        DEBUG_PRINT(currentMagnitude);
-        DEBUG_PRINT(F(", prev "));
-        DEBUG_PRINT(previousMagnitude);
-        DEBUG_PRINT(F(", delta "));
-        DEBUG_PRINT(abs(delta));
-        DEBUG_PRINT(F(", margin; "));
-        DEBUG_PRINT(margin);
-        DEBUG_PRINTLN(F(" - Overflow detected. Ignore iteration"));
-#endif
-        previousMagnitude = minl(currentMagnitude, previousMagnitude);
-        return;
-      }
-    }
-
-    // Movement accumulator for shake detection
-    if (delta > magnitudeThreshold) {
-      DEBUG_PRINTLN(F("ACCEL ACCUM"));
-      accelAccum++;
-    }
-
-    if (accelAccum > 5) {
-      DEBUG_PRINTLN(F("SHAKE"));
-      shakeCount++;
-      if (shakeCount > 3) {
-        mpu.setFIFOEnabled(false);
-        index = random(0, 14);
-        DEBUG_PRINT(F("Display message "));
-        DEBUG_PRINTLN(index);
-        displayMessage(index);
-        delay(REFRESH_INTERVAL * 2);
-        drawFillPaged();
-        displayIdleMessage();
-        shakeCount = 0;
-        mpu.setFIFOEnabled(true);
-      }
-      accelAccum = 0;
-    }
-
-#if OUTPUT_ACCEL_VECTORS
-    DEBUG_PRINT(F("areal\t"));
-    DEBUG_PRINT(aaReal.x);
-    DEBUG_PRINT(F("\t"));
-    DEBUG_PRINT(aaReal.y);
-    DEBUG_PRINT(F("\t"));
-    DEBUG_PRINT(aaReal.z);
-    DEBUG_PRINT(F("\t"));
-    DEBUG_PRINTLN(currentMagnitude);
+#if OUTPUT_DISPLAY_MESSAGE
+  DEBUG_PRINT("a/g/pitch/roll:\t");
+  DEBUG_PRINT(ax); DEBUG_PRINT("\t");
+  DEBUG_PRINT(ay); DEBUG_PRINT("\t");
+  DEBUG_PRINT(az); DEBUG_PRINT("\t");
+  DEBUG_PRINT(gx); DEBUG_PRINT("\t");
+  DEBUG_PRINT(gy); DEBUG_PRINT("\t");
+  DEBUG_PRINT(gz); DEBUG_PRINT("\t");
+  DEBUG_PRINT(*pitch); DEBUG_PRINT("\t");
+  DEBUG_PRINTLN(*roll);
 #endif
 
-    previousMagnitude = currentMagnitude;
-
-    // Blink LED to indicate activity
-    blinkState = !blinkState;
-    digitalWrite(LED_PIN, blinkState);
+  if ((*roll >= ROLL_THRESHOLD) && (*pitch >= PITCH_THRESHOLD)) {
+    shakeCount++;
   }
-#if OUTPUT_INVALID_MPU_STATE
-  else {
-    DEBUG_PRINT(F("unknown mpu status ("));
-    DEBUG_PRINT(mpuIntStatus);
-    DEBUG_PRINT(F(")"));
-    DEBUG_PRINTLN(F(""));
+
+  currentShakes = accelCount % 2;
+  accelCount -= accelCount % 2;
+  shakeCount += currentShakes;
+
+  if (shakeCount == SHAKE_COUNT_TRIGGER) {
+    DEBUG_PRINTLN(F("SHAKE"));
+
+    messageIndex = random(0, 14);
+    DEBUG_PRINT(F("Display message "));
+    DEBUG_PRINTLN(messageIndex);
+    displayMessage(messageIndex);
+    delay(REFRESH_INTERVAL * 2);
+    drawFillPaged();
+    displayIdleMessage();
+    resetCounters();
   }
-#endif
+
+  // blink LED to indicate activity
+  blinkState = !blinkState;
+  digitalWrite(LED_PIN, blinkState);
+  delay(sleepDelay); // calculate delay from sample rate
+
+  // Calculate elapsed time and increment counter
+  elapsedTime = millis() - startTime;
+  timeCount += elapsedTime;
 }
 
-long vectorNorm(VectorInt16 *vec) {
-  long a = (long)abs(vec->x);
-  a = a * a;
-  long b = (long)abs(vec->y);
-  b = b * b;
-  long c = (long)abs(vec->z);
-  c = c * c;
-  long sum = a + b + c;
-  long root = sqrt(sum);
-#if OUTPUT_NORMALIZED_VECTORS
-  DEBUG_PRINT(F("norm\t");
-              DEBUG_PRINT(a);
-              DEBUG_PRINT(F("\t"));
-              DEBUG_PRINT(b);
-              DEBUG_PRINT(F("\t"));
-              DEBUG_PRINT(c);
-              DEBUG_PRINT(F("sum\t"));
-              DEBUG_PRINT(sum);
-              DEBUG_PRINT(F("\t"));
-              DEBUG_PRINTLN(root);
-#endif
-              return root;
+// complementaryFilterr reduces the IMU input into a 2-dimensional output (pitch, roll)
+// Credit: Pieter-Jan Van de Maele: https://www.pieter-jan.com/node/11
+void complementaryFilter(int16_t accData[3], int16_t gyrData[3], float *pitch, float *roll)
+{
+  float pitchAcc, rollAcc;
+
+  // Integrate the gyroscope data -> int(angularSpeed) = angle
+  *pitch += ((float)gyrData[0] / GYROSCOPE_SENSITIVITY) * dt; // Angle around the X-axis
+  *roll -= ((float)gyrData[1] / GYROSCOPE_SENSITIVITY) * dt;    // Angle around the Y-axis
+
+  // Compensate for drift with accelerometer data if !bullshit
+  // Sensitivity = -2 to 2 G at 16Bit -> 2G = 32768 && 0.5G = 8192
+  int forceMagnitudeApprox = abs(accData[0]) + abs(accData[1]) + abs(accData[2]);
+  if (forceMagnitudeApprox > 8192 && forceMagnitudeApprox < 32768)
+  {
+    // Turning around the X axis results in a vector on the Y-axis
+    pitchAcc = atan2f((float)accData[1], (float)accData[2]) * 180 / M_PI;
+    *pitch = *pitch * 0.98 + pitchAcc * 0.02;
+
+    // Turning around the Y axis results in a vector on the X-axis
+    rollAcc = atan2f((float)accData[0], (float)accData[2]) * 180 / M_PI;
+    *roll = *roll * 0.98 + rollAcc * 0.02;
+  }
 }
 
-byte sign(long x) {
-  return ((x > 0) - (x < 0));
-}
-
-long minl(long x, long y) {
-  return x < y ? x : y;
-}
-
-void displayMessage(byte index) {
+void displayMessage(long index) {
   String randomMessage = getMessage(index);
 
   char charMessage[MAX_MESSAGE_LENGTH];
@@ -314,7 +258,7 @@ void displayMessage(byte index) {
   DEBUG_PRINTLN(F("]"));
 #endif
 
-  fizzlefade_message(charMessage, fill/*random(0, 100) > 50 ? fill : clear*/);
+  fizzlefade_message(charMessage, random(0, 100) > 50 ? fill : clear);
 }
 
 void displayIdleMessage() {

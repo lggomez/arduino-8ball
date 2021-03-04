@@ -1,7 +1,7 @@
 #include <WString.h>
 #include "_const.h"
 
-String getMessage(byte index) {
+String getMessage(long index) {
   switch (index) {
     case 0:
       return F("It is\ncertain\0");
