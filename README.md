@@ -20,6 +20,8 @@ This can be mounted on any small box (provided that you cannot print a ball shap
 
 ![20210303_232549](https://user-images.githubusercontent.com/6326271/109906737-cd2e8180-7c7f-11eb-8654-5d8ae8fbcb92.jpg)
 
+It is also wired to a power switch and a 9v battery to make the device portable (and give it some additional mass for better feeling upon shaking)
+
 ![20210303_232811](https://user-images.githubusercontent.com/6326271/109906752-d4558f80-7c7f-11eb-9793-0cb5c10df224.jpg)
 
 ## Video demo
