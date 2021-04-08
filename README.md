@@ -14,7 +14,7 @@ Just ask your question and give it a little shake!
 
 # v1
 
-**(Update february 2021)**: After a redisign of the internals (and updates of the dependencies that make them more stable) this project is in a v1 state, after some months of years of lack of maintenance:
+**(Update february 2021)**: After a redisign of the internals (and updates of the dependencies that make them more stable) this project is in a v1 state, after some months/years of lack of maintenance:
 
 This can be mounted on any small box (provided that you cannot print a ball shaped container) and it is currently based on an Arduino Nano:
 
