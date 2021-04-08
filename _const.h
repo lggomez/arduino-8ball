@@ -25,6 +25,14 @@
 #define DEBUG_PRINTLN(x)
 #endif
 
+#ifdef  DEBUG_PLOTTER
+#define DEBUG_PRINTP(x) Serial.print(x)
+#define DEBUG_PRINTLNP(x) Serial.println(x)
+#else
+#define DEBUG_PRINTP(x) DEBUG_PRINT(x)
+#define DEBUG_PRINTLNP(x) DEBUG_PRINTLN(x)
+#endif
+
 #define OUTPUT_ACCEL_VECTORS 0
 #define OUTPUT_DISPLAY_MESSAGE 1
 /*

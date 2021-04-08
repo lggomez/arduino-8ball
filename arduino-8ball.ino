@@ -1,4 +1,5 @@
 //#define DEBUG 1
+//#define DEBUG_PLOTTER 1
 
 #include <Arduino.h>
 #include <WString.h>
@@ -166,15 +167,14 @@ void loop(void) {
   complementaryFilter(accelData, gyroData, pitch, roll);
 
 #if OUTPUT_DISPLAY_MESSAGE
-  DEBUG_PRINT("a/g/pitch/roll:\t");
-  DEBUG_PRINT(ax); DEBUG_PRINT("\t");
-  DEBUG_PRINT(ay); DEBUG_PRINT("\t");
-  DEBUG_PRINT(az); DEBUG_PRINT("\t");
-  DEBUG_PRINT(gx); DEBUG_PRINT("\t");
-  DEBUG_PRINT(gy); DEBUG_PRINT("\t");
-  DEBUG_PRINT(gz); DEBUG_PRINT("\t");
-  DEBUG_PRINT(*pitch); DEBUG_PRINT("\t");
-  DEBUG_PRINTLN(*roll);
+  DEBUG_PRINTP("ax:"); DEBUG_PRINTP(ax);
+  DEBUG_PRINTP(", ay:"); DEBUG_PRINTP(ay);
+  DEBUG_PRINTP(", az:"); DEBUG_PRINTP(az);
+  //DEBUG_PRINT(gx); DEBUG_PRINT("\t");
+  //DEBUG_PRINT(gy); DEBUG_PRINT("\t");
+  //DEBUG_PRINT(gz); DEBUG_PRINT("\t");
+  DEBUG_PRINTP(", pitch:"); DEBUG_PRINTP(*pitch);
+  DEBUG_PRINTP(", roll:"); DEBUG_PRINTLNP(*roll);
 #endif
 
   // Shake detection based on IMU data and increment counters
