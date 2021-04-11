@@ -1,3 +1,9 @@
+//#define DEBUG 1
+//#define DEBUG_PLOTTER 1
+//#define DEBUG_FIZZLEFADE 0
+//#define OUTPUT_LINE_COUNT 0
+//#define OUTPUT_DISPLAY_MESSAGE 1
+
 #define DEFAULT_DRAW_COLOR 1
 #define SH1106_WIDTH 128
 #define SH1106_HEIGHT 64
@@ -8,14 +14,15 @@
 #define UPPER_MARGIN 8
 #define LOWER_MARGIN 8
 
-#define MESSAGE_REFRESH_INTERVAL 250
+#define SHAKE_DELAY_INTERVAL 350 // Post-message delay in ms until display is reset
 
-#define FIZZLEFADE_BUFSIZE 136
+#define FIZZLEFADE_BUFFER_THRESHOLD 200 // LFSR iterations from fizzlefade to wait until 
+                                        // writing the page buffer into display
 
 #define MAX_MESSAGE_LENGTH 24
 
 /*
-  -----------------DEBUG FLAGS AND FEATURE START
+  -----------------DEBUG FEATURE START
 */
 #ifdef  DEBUG
 #define DEBUG_PRINT(x) Serial.print(x)
@@ -32,9 +39,6 @@
 #define DEBUG_PRINTP(x) DEBUG_PRINT(x)
 #define DEBUG_PRINTLNP(x) DEBUG_PRINTLN(x)
 #endif
-
-#define OUTPUT_ACCEL_VECTORS 0
-#define OUTPUT_DISPLAY_MESSAGE 1
 /*
-  -----------------DEBUG FLAGS AND FEATURE END
+  -----------------DEBUG END
 */

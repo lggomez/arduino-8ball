@@ -1,5 +1,4 @@
-//#define DEBUG 1
-//#define DEBUG_PLOTTER 1
+// See _const.h for debug flags definitions
 
 #include <Arduino.h>
 #include <WString.h>
@@ -29,8 +28,8 @@ void complementaryFilter(int16_t accData[3], int16_t gyrData[3], float *pitch, f
 void displayIdleMessage();
 void displayMessage(long index);
 // fizzlefade.ino
-boolean fizzlefade_message(char* charMessage, fizzlefade_mode mode);
-void fizzle_message(u8g2_uint_t x, u8g2_uint_t y, char* charMessage, byte lineCount, fizzlefade_mode mode, u8g2_uint_t batch_count);
+void fizzlefade_message(char* charMessage, fizzlefade_mode mode);
+void fizzle_message(u8g2_uint_t x, u8g2_uint_t y, char* charMessage, byte lineCount, fizzlefade_mode mode, u8g2_uint_t fizzlefade_iterations);
 void drawFillPaged(void);
 void drawFill(void);
 void printMessage(char* charMessage, byte lineCount, fizzlefade_mode mode);
@@ -58,8 +57,10 @@ int16_t ax, ay, az;
 int16_t gx, gy, gz;
 
 // u8g2 constructor
-U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+// This constructor also defines buffer size (256 bytes =  4 * (128 * 16 pixels) buffer tiles
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 
+// Accelerometer parameters
 #define ACCELEROMETER_SENSITIVITY 8192.0
 #define GYROSCOPE_SENSITIVITY 65.536
 #define dt 0.01 // 10 ms sample rate!
@@ -194,7 +195,7 @@ void loop(void) {
     DEBUG_PRINT(F("Display message "));
     DEBUG_PRINTLN(messageIndex);
     displayMessage(messageIndex);
-    delay(MESSAGE_REFRESH_INTERVAL * 2);
+    delay(SHAKE_DELAY_INTERVAL);
     drawFillPaged();
     displayIdleMessage();
     resetCounters();
@@ -216,7 +217,7 @@ void resetCounters() {
   startTime = millis();
 }
 
-// complementaryFilterr reduces the IMU input into a 2-dimensional output (pitch, roll)
+// complementaryFilter reduces the IMU input into a 2-dimensional output (pitch, roll)
 // Credit: Pieter-Jan Van de Maele: https://www.pieter-jan.com/node/11
 void complementaryFilter(int16_t accData[3], int16_t gyrData[3], float *pitch, float *roll)
 {
