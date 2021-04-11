@@ -24,6 +24,6 @@ It is also wired to a power switch and a 9v battery to make the device portable 
 
 ![20210303_232811](https://user-images.githubusercontent.com/6326271/109906752-d4558f80-7c7f-11eb-9793-0cb5c10df224.jpg)
 
-## Video demo
+## Demo
 
-https://user-images.githubusercontent.com/6326271/109906586-85a7f580-7c7f-11eb-9a72-98b97e9639d9.mp4
+![8ball](https://user-images.githubusercontent.com/6326271/114320403-3362bb80-9aec-11eb-9c84-3eb57219e567.gif)
