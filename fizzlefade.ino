@@ -31,7 +31,7 @@ void fizzlefade_message(char* charMessage, fizzlefade_mode mode)
 
   if (mode == clear) {
     // Fill the display at start if mode is clear
-    u8g2.drawBox(0, 0, SH1106_WIDTH, SH1106_HEIGHT);
+    drawFill();
   }
 
   do {
